@@ -1,0 +1,16 @@
+#:schema https://rlbot.org/schemas/agent.json
+[settings]
+name = "PPO Bot"
+loadout_file = "loadout.toml"
+root_dir = ""
+# Same pattern as bot.toml: cwd is typically src/, venv at project root
+run_command = "..\\venv\\Scripts\\python.exe ppo_bot.py"
+run_command_linux = "../venv/bin/python ppo_bot.py"
+agent_id = "developer/ppo_bot"
+logo_file = ""
+
+[details]
+description = "Trained rlgym-ppo policy (1v1). Set PPO_CHECKPOINT to checkpoint folder (e.g. data/checkpoints/rlgym-ppo-run-<ts>/50000)."
+developer = "You"
+language = "Python"
+tags = ["1v1"]
