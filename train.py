@@ -35,7 +35,9 @@ from rlgym.rocket_league import common_values
 from rlgym_ppo.util import RLGymV2GymWrapper
 
 from src.training.rewards import (
-    InAirReward,
+    BallTouchReward,
+    DefensivePenaltyReward,
+    ProximityToBallReward,
     SpeedTowardBallReward,
     VelocityBallToGoalReward,
 )
@@ -59,9 +61,11 @@ def build_rlgym_v2_env():
     )
 
     reward_fn = CombinedReward(
-        (InAirReward(), 0.002),
         (SpeedTowardBallReward(), 0.01),
+        (ProximityToBallReward(), 0.005),
+        (BallTouchReward(), 1.0),
         (VelocityBallToGoalReward(), 0.1),
+        (DefensivePenaltyReward(), 0.05),
         (GoalReward(), 10.0),
     )
 
