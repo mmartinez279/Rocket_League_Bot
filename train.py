@@ -42,10 +42,12 @@ from src.training.rewards import (
     BallTouchReward,
     BoostAccumulationReward,
     DefensivePenaltyReward,
+    FaceBallReward,
     ProximityToBallReward,
     SpeedTowardBallReward,
     VelocityBallToGoalReward,
 )
+from src.training.metrics import BehaviorLogger
 
 
 def build_rlgym_v2_env():
@@ -65,15 +67,19 @@ def build_rlgym_v2_env():
         TimeoutCondition(timeout_seconds=game_timeout_seconds),
     )
 
+    # Reward weights tuned for early training (learning to drive, chase, hit):
+    #   - Strong shaping: face ball, drive toward ball, stay near ball
+    #   - Big event rewards: touching ball, ball toward goal, scoring
+    #   - BoostAccumulation/BallOnRoof/BallCarryStability REMOVED:
+    #     they reward passive play or require advanced mechanics the bot
+    #     hasn't learned yet.  Re-add with low weights in later stages.
     reward_fn = CombinedReward(
-        (SpeedTowardBallReward(), 0.01),
-        (ProximityToBallReward(), 0.005),
-        (BallTouchReward(), 1.0),
-        (VelocityBallToGoalReward(), 0.1),
-        (DefensivePenaltyReward(), 0.05),
-        (BoostAccumulationReward(), 0.1),
-        (BallOnRoofReward(), 0.5),
-        (BallCarryStabilityReward(), 0.5),
+        (FaceBallReward(), 0.5),
+        (SpeedTowardBallReward(), 1.0),
+        (ProximityToBallReward(), 0.5),
+        (BallTouchReward(), 3.0),
+        (VelocityBallToGoalReward(), 2.0),
+        (DefensivePenaltyReward(), 0.5),
         (GoalReward(), 10.0),
     )
 
@@ -127,6 +133,12 @@ if __name__ == "__main__":
         metavar="PATH",
         help="Resume from the latest checkpoint, or from PATH if provided",
     )
+    parser.add_argument(
+        "--render",
+        action="store_true",
+        help="Render one training environment so you can watch the bot learn. "
+        "Install rlviser-py for interactive pause/speed control: pip install rlviser-py",
+    )
     args = parser.parse_args()
 
     if args.quick_test:
@@ -155,7 +167,7 @@ if __name__ == "__main__":
         build_rlgym_v2_env,
         n_proc=n_proc,
         min_inference_size=min_inference_size,
-        metrics_logger=None,
+        metrics_logger=BehaviorLogger(),
         ppo_batch_size=ppo_batch_size,
         policy_layer_sizes=[256, 256, 256],
         critic_layer_sizes=[256, 256, 256],
@@ -172,5 +184,7 @@ if __name__ == "__main__":
         timestep_limit=timestep_limit,
         log_to_wandb=False,
         checkpoint_load_folder=checkpoint_load,
+        render=args.render,
+        render_delay=1 / 15 if args.render else 0,
     )
     learner.learn()

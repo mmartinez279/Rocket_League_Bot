@@ -5,6 +5,7 @@ Set PPO_CHECKPOINT to the folder containing PPO_POLICY.pt (e.g. data/checkpoints
 Run a match with this bot (e.g. Orange) vs Human (Blue) from rlbot.toml.
 """
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -20,6 +21,9 @@ import numpy as np
 import torch
 from rlbot.flat import ControllerState, GamePacket
 from rlbot.managers import Bot
+
+logger = logging.getLogger("ppo_bot")
+logging.basicConfig(level=logging.INFO, format="[PPOBot] %(message)s")
 
 from rlgym.rocket_league import common_values
 from rlgym.rocket_league.action_parsers import LookupTableAction
@@ -70,9 +74,12 @@ class PPOBot(Bot):
 
     def initialize(self) -> None:
         checkpoint_path = os.environ.get("PPO_CHECKPOINT", "").strip()
+        logger.info("PPO_CHECKPOINT env var = %r", checkpoint_path or "(not set)")
+
         if not checkpoint_path or not Path(checkpoint_path).is_dir():
             # Try default: latest run under data/checkpoints
             base = _project_root / "data" / "checkpoints"
+            logger.info("Auto-scanning for checkpoints in %s", base)
             if base.is_dir():
                 runs = sorted(base.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
                 for run_dir in runs:
@@ -82,7 +89,11 @@ class PPOBot(Bot):
                     subs = [d for d in run_dir.iterdir() if d.is_dir() and d.name.isdigit()]
                     if subs:
                         checkpoint_path = str(max(subs, key=lambda d: int(d.name)))
+                        logger.info("Auto-detected checkpoint: %s", checkpoint_path)
                         break
+            else:
+                logger.warning("Checkpoint base dir does not exist: %s", base)
+
         if not checkpoint_path or not (Path(checkpoint_path) / "PPO_POLICY.pt").exists():
             raise FileNotFoundError(
                 "PPO_CHECKPOINT must point to a folder containing PPO_POLICY.pt (e.g. data/checkpoints/rlgym-ppo-run-<ts>/50000). "
@@ -124,9 +135,26 @@ class PPOBot(Bot):
         self.policy.eval()
         self.device = device
 
+        logger.info("=== MODEL LOADED SUCCESSFULLY ===")
+        logger.info("  Checkpoint: %s", checkpoint_path)
+        logger.info("  Device: %s", device)
+        logger.info("  Obs size: %d, Action size: %d", obs_size, act_size)
+        logger.info("  Layer sizes: %s", layer_sizes)
+        total_params = sum(p.numel() for p in self.policy.parameters())
+        logger.info("  Total parameters: %d", total_params)
+
+        # Quick sanity check: run a dummy observation through the model
+        with torch.no_grad():
+            dummy = torch.zeros(1, obs_size, device=device)
+            dummy_act = self.policy.get_action(dummy, deterministic=True)
+            if isinstance(dummy_act, tuple):
+                dummy_act = dummy_act[0]
+            logger.info("  Sanity check (zeros obs -> action): %d", int(dummy_act.item()))
+
         self._tick = 0
         self._last_action: np.ndarray = np.zeros(8, dtype=np.float32)
         self._shared_info: Dict[str, Any] = {}
+        self._diag_log_count = 0  # Log first few actions for debugging
 
     def get_output(self, packet: GamePacket) -> ControllerState:
         if len(packet.balls) == 0:
@@ -178,6 +206,22 @@ class PPOBot(Bot):
             if agent_id in parsed_dict:
                 arr = np.asarray(parsed_dict[agent_id], dtype=np.float32).flatten()
                 self._last_action = arr[:8] if len(arr) >= 8 else np.pad(arr, (0, 8 - len(arr)))
+
+            # Log first 10 actions so you can verify the model is working
+            if self._diag_log_count < 10:
+                self._diag_log_count += 1
+                car_pos = state.cars[agent_id].physics.position
+                car_vel = state.cars[agent_id].physics.linear_velocity
+                ball_pos = state.ball.position
+                logger.info(
+                    "Tick %d | action_idx=%d | throttle=%.2f steer=%.2f boost=%s | "
+                    "car_pos=(%.0f,%.0f,%.0f) car_vel=(%.0f,%.0f,%.0f) ball=(%.0f,%.0f,%.0f)",
+                    self._tick, action_index,
+                    self._last_action[0], self._last_action[1], bool(self._last_action[6] > 0.5),
+                    car_pos[0], car_pos[1], car_pos[2],
+                    car_vel[0], car_vel[1], car_vel[2],
+                    ball_pos[0], ball_pos[1], ball_pos[2],
+                )
 
         self._tick += 1
         return _action_to_controller(self._last_action)

@@ -209,6 +209,10 @@ class BoostAccumulationReward(RewardFunction[AgentID, GameState, float]):
 
     Combines a small continuous reward for current boost amount with a
     larger one-time reward each time boost increases (pad pickup).
+
+    WARNING: This reward can teach the bot to sit still and hoard boost
+    instead of playing. Use with very low weight or only in later training
+    stages when the bot already knows how to drive and hit the ball.
     """
 
     def reset(
@@ -308,4 +312,50 @@ class BallCarryStabilityReward(RewardFunction[AgentID, GameState, float]):
             )
             scale = common_values.CAR_MAX_SPEED
             rewards[agent] = max(0.0, 1.0 - vel_diff / scale)
+        return rewards
+
+
+class FaceBallReward(RewardFunction[AgentID, GameState, float]):
+    """Rewards the agent for pointing its nose toward the ball.
+
+    Uses the dot product of the car's forward vector with the direction
+    to the ball.  Returns a value in [-1, 1] (1 = perfectly facing ball,
+    -1 = facing directly away).  Clamped to [0, 1] so only positive
+    alignment is rewarded.
+
+    This is a critical early-training reward: a bot that faces the ball
+    can learn to drive toward it; a bot facing away cannot.
+    """
+
+    def reset(
+        self,
+        agents: List[AgentID],
+        initial_state: GameState,
+        shared_info: Dict[str, Any],
+    ) -> None:
+        pass
+
+    def get_rewards(
+        self,
+        agents: List[AgentID],
+        state: GameState,
+        is_terminated: Dict[AgentID, bool],
+        is_truncated: Dict[AgentID, bool],
+        shared_info: Dict[str, Any],
+    ) -> Dict[AgentID, float]:
+        rewards = {}
+        for agent in agents:
+            car = state.cars[agent]
+            car_physics = car.inverted_physics if car.is_orange else car.physics
+            ball_physics = state.inverted_ball if car.is_orange else state.ball
+
+            pos_diff = ball_physics.position - car_physics.position
+            dist = max(np.linalg.norm(pos_diff), 1e-6)
+            dir_to_ball = pos_diff / dist
+
+            # Car forward vector from rotation matrix (first column)
+            forward = car_physics.forward
+            alignment = float(np.dot(forward, dir_to_ball))
+
+            rewards[agent] = max(alignment, 0.0)
         return rewards
