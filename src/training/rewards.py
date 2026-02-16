@@ -226,8 +226,8 @@ class BallOnRoofReward(RewardFunction[AgentID, GameState, float]):
         rewards = {}
         for agent in agents:
             car = state.cars[agent]
-            car_physics = car.physics if car.is_orange else car.inverted_physics
-            ball_physics = state.ball if car.is_orange else state.inverted_ball
+            car_physics = car.inverted_physics if car.is_orange else car.physics
+            ball_physics = state.inverted_ball if car.is_orange else state.ball
             _, proximity = _ball_on_roof(car_physics, ball_physics)
             rewards[agent] = proximity
         return rewards
@@ -255,8 +255,8 @@ class BallCarryStabilityReward(RewardFunction[AgentID, GameState, float]):
         rewards = {}
         for agent in agents:
             car = state.cars[agent]
-            car_physics = car.physics if car.is_orange else car.inverted_physics
-            ball_physics = state.ball if car.is_orange else state.inverted_ball
+            car_physics = car.inverted_physics if car.is_orange else car.physics
+            ball_physics = state.inverted_ball if car.is_orange else state.ball
             ball_above, _ = _ball_on_roof(car_physics, ball_physics)
             if not ball_above:
                 rewards[agent] = 0.0
