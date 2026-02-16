@@ -1,6 +1,6 @@
 #:schema https://rlbot.org/schemas/agent.json
 [settings]
-name = "PPO Bot"
+name = "Maddie Bot"
 loadout_file = "loadout.toml"
 root_dir = ""
 # Same pattern as bot.toml: cwd is typically src/, venv at project root
