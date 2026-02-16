@@ -3,6 +3,8 @@ RLGym PPO training script (from https://rlgym.org/Rocket%20League/training_an_ag
 
 Run from project root: python train.py
 Run with --quick-test to verify the pipeline (short run + one checkpoint).
+Run with --resume to continue training from the latest checkpoint.
+Run with --resume PATH to continue from a specific checkpoint folder.
 """
 
 import argparse
@@ -115,6 +117,14 @@ if __name__ == "__main__":
         action="store_true",
         help="Short run (~1–2 min) that saves one checkpoint to verify the pipeline",
     )
+    parser.add_argument(
+        "--resume",
+        nargs="?",
+        const="latest",
+        default=None,
+        metavar="PATH",
+        help="Resume from the latest checkpoint, or from PATH if provided",
+    )
     args = parser.parse_args()
 
     if args.quick_test:
@@ -136,6 +146,9 @@ if __name__ == "__main__":
 
     min_inference_size = max(1, int(round(n_proc * 0.9)))
 
+    # None = fresh start, "latest" = auto-find newest checkpoint, or a path
+    checkpoint_load = args.resume
+
     learner = Learner(
         build_rlgym_v2_env,
         n_proc=n_proc,
@@ -156,5 +169,6 @@ if __name__ == "__main__":
         save_every_ts=save_every_ts,
         timestep_limit=timestep_limit,
         log_to_wandb=False,
+        checkpoint_load_folder=checkpoint_load,
     )
     learner.learn()
