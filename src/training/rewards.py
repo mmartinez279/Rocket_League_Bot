@@ -204,6 +204,48 @@ def _ball_on_roof(car_physics, ball_physics) -> tuple[bool, float]:
     return ball_above, proximity
 
 
+class BoostAccumulationReward(RewardFunction[AgentID, GameState, float]):
+    """Rewards the agent for having boost and for picking up boost pads.
+
+    Combines a small continuous reward for current boost amount with a
+    larger one-time reward each time boost increases (pad pickup).
+    """
+
+    def reset(
+        self,
+        agents: List[AgentID],
+        initial_state: GameState,
+        shared_info: Dict[str, Any],
+    ) -> None:
+        self._prev_boost: Dict[AgentID, float] = {
+            agent: initial_state.cars[agent].boost_amount for agent in agents
+        }
+
+    def get_rewards(
+        self,
+        agents: List[AgentID],
+        state: GameState,
+        is_terminated: Dict[AgentID, bool],
+        is_truncated: Dict[AgentID, bool],
+        shared_info: Dict[str, Any],
+    ) -> Dict[AgentID, float]:
+        rewards = {}
+        for agent in agents:
+            boost = state.cars[agent].boost_amount  # 0–100
+            prev = self._prev_boost.get(agent, 0.0)
+
+            # Continuous reward for having boost (normalized to 0–1)
+            hold_reward = boost / 100.0
+
+            # Bonus when boost increases (picked up a pad)
+            gain = max(boost - prev, 0.0)
+            pickup_reward = gain / 100.0
+
+            rewards[agent] = 0.5 * hold_reward + 0.5 * pickup_reward
+            self._prev_boost[agent] = boost
+        return rewards
+
+
 class BallOnRoofReward(RewardFunction[AgentID, GameState, float]):
     """Rewards the agent when the ball is above the car and within horizontal range (roof zone)."""
 
