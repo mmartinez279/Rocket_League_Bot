@@ -35,6 +35,8 @@ from rlgym.rocket_league import common_values
 from rlgym_ppo.util import RLGymV2GymWrapper
 
 from src.training.rewards import (
+    BallCarryStabilityReward,
+    BallOnRoofReward,
     BallTouchReward,
     DefensivePenaltyReward,
     ProximityToBallReward,
@@ -66,6 +68,8 @@ def build_rlgym_v2_env():
         (BallTouchReward(), 1.0),
         (VelocityBallToGoalReward(), 0.1),
         (DefensivePenaltyReward(), 0.05),
+        (BallOnRoofReward(), 0.5),
+        (BallCarryStabilityReward(), 0.5),
         (GoalReward(), 10.0),
     )
 
