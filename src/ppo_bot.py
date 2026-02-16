@@ -102,15 +102,25 @@ class PPOBot(Bot):
         self.act_size = act_size
 
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
+
+        # Infer layer sizes from the saved checkpoint so the bot always
+        # matches whatever architecture was used during training.
+        state_dict = torch.load(Path(checkpoint_path) / "PPO_POLICY.pt", map_location=device)
+        layer_sizes = []
+        for key in sorted(state_dict.keys()):
+            if key.endswith(".weight") and key.startswith("model."):
+                rows = state_dict[key].shape[0]
+                # The final linear layer maps to act_size – skip it
+                if rows != act_size:
+                    layer_sizes.append(rows)
+
         self.policy = DiscreteFF(
             obs_size,
             act_size,
-            (2048, 2048, 1024, 1024),
+            tuple(layer_sizes),
             device,
         ).to(device)
-        self.policy.load_state_dict(
-            torch.load(Path(checkpoint_path) / "PPO_POLICY.pt", map_location=device)
-        )
+        self.policy.load_state_dict(state_dict)
         self.policy.eval()
         self.device = device
 
