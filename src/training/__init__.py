@@ -2,6 +2,7 @@
 from src.training.rewards import (
     BallCarryStabilityReward,
     BallOnRoofReward,
+    BallToGoalDistReward,
     BallTouchReward,
     BoostAccumulationReward,
     DefensivePenaltyReward,

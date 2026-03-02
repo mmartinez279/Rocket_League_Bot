@@ -39,6 +39,7 @@ from rlgym_ppo.util import RLGymV2GymWrapper
 from src.training.rewards import (
     BallCarryStabilityReward,
     BallOnRoofReward,
+    BallToGoalDistReward,
     BallTouchReward,
     BoostAccumulationReward,
     DefensivePenaltyReward,
@@ -67,18 +68,21 @@ def build_rlgym_v2_env():
         TimeoutCondition(timeout_seconds=game_timeout_seconds),
     )
 
-    # Reward weights tuned for early training (learning to drive, chase, hit):
-    #   - Strong shaping: face ball, drive toward ball, stay near ball
-    #   - Big event rewards: touching ball, ball toward goal, scoring
-    #   - BoostAccumulation/BallOnRoof/BallCarryStability REMOVED:
-    #     they reward passive play or require advanced mechanics the bot
-    #     hasn't learned yet.  Re-add with low weights in later stages.
+    # Reward weights: shaping rewards are LOW (gentle nudges), event rewards
+    # are HIGH (clear incentives).  Previous version had shaping too high,
+    # causing the bot to jiggle behind the ball instead of hitting it.
+    #
+    # Stage 2 (later): re-add BallOnRoofReward + BallCarryStabilityReward
+    # at low weights once the bot reliably drives, hits, and scores.
     reward_fn = CombinedReward(
-        (FaceBallReward(), 0.5),
-        (SpeedTowardBallReward(), 1.0),
-        (ProximityToBallReward(), 0.5),
-        (BallTouchReward(), 3.0),
-        (VelocityBallToGoalReward(), 2.0),
+        # --- Shaping (continuous, low weight) ---
+        (FaceBallReward(), 0.1),
+        (SpeedTowardBallReward(), 0.2),
+        (ProximityToBallReward(), 0.1),
+        # --- Event / outcome (sparse, high weight) ---
+        (BallTouchReward(), 5.0),
+        (VelocityBallToGoalReward(), 3.0),
+        (BallToGoalDistReward(), 0.5),
         (DefensivePenaltyReward(), 0.5),
         (GoalReward(), 10.0),
     )

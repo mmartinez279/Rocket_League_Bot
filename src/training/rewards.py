@@ -194,9 +194,28 @@ class VelocityBallToGoalReward(RewardFunction[AgentID, GameState, float]):
 # Horizontal distance threshold for "ball on roof" (uu); car ~120, ball radius ~91
 HORIZ_ROOF_THRESHOLD = 150.0
 
+# Minimum dot(car_up, world_up) to consider the car "level".
+# 0.9 ≈ tilted less than ~25°, so driving on walls/ceiling won't count.
+CAR_LEVEL_THRESHOLD = 0.9
+
+WORLD_UP = np.array([0.0, 0.0, 1.0], dtype=np.float32)
+
 
 def _ball_on_roof(car_physics, ball_physics) -> tuple[bool, float]:
-    """Return (is_above, proximity_reward). Ball above car and within horizontal range."""
+    """Return (is_above, proximity_reward).
+
+    Ball must be above the car, within horizontal range, AND the car must
+    be approximately level (not on a wall or ceiling).  This prevents the
+    bot from earning dribble reward by chasing the ball up walls.
+    """
+    # Check car is roughly level
+    try:
+        car_up = car_physics.up
+    except Exception:
+        car_up = WORLD_UP
+    if float(np.dot(car_up, WORLD_UP)) < CAR_LEVEL_THRESHOLD:
+        return False, 0.0
+
     pos_diff = ball_physics.position - car_physics.position
     dist_xy = np.linalg.norm(pos_diff[0:2])
     ball_above = ball_physics.position[2] > car_physics.position[2]
@@ -312,6 +331,47 @@ class BallCarryStabilityReward(RewardFunction[AgentID, GameState, float]):
             )
             scale = common_values.CAR_MAX_SPEED
             rewards[agent] = max(0.0, 1.0 - vel_diff / scale)
+        return rewards
+
+
+class BallToGoalDistReward(RewardFunction[AgentID, GameState, float]):
+    """Rewards when the ball is closer to the opponent's goal.
+
+    Returns a value in [0, 1] that increases as the ball approaches the
+    goal line.  This gives continuous incentive to push the ball all the
+    way into the net rather than leaving it sitting in front of the goal.
+    """
+
+    def reset(
+        self,
+        agents: List[AgentID],
+        initial_state: GameState,
+        shared_info: Dict[str, Any],
+    ) -> None:
+        pass
+
+    def get_rewards(
+        self,
+        agents: List[AgentID],
+        state: GameState,
+        is_terminated: Dict[AgentID, bool],
+        is_truncated: Dict[AgentID, bool],
+        shared_info: Dict[str, Any],
+    ) -> Dict[AgentID, float]:
+        rewards = {}
+        for agent in agents:
+            car = state.cars[agent]
+            ball = state.inverted_ball if car.is_orange else state.ball
+
+            # In blue's perspective the opponent's goal is at y = +BACK_NET_Y.
+            # Reward = how far the ball has advanced toward that goal line,
+            # normalized to [0, 1] over the full field length.
+            ball_y = float(ball.position[1])
+            rewards[agent] = max(
+                (ball_y + common_values.BACK_NET_Y)
+                / (2 * common_values.BACK_NET_Y),
+                0.0,
+            )
         return rewards
 
 
